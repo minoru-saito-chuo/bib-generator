@@ -311,10 +311,15 @@ const App = () => {
 
   const generateOutput = () => {
     const itemStrings = items.map(formatItem).join('\n\n');
+    const hasWebUrl = items.some(item => item.entryType === 'web' && item.url);
+    const warning = hasWebUrl
+      ? "% メインファイルのプリアンブルに\n% \\usepackage{url}\n% を挿入してください．\n\n"
+      : "";
+
     if (mode === 'full') {
-      return `\\begin{thebibliography}{99}\n\n${itemStrings}\n\n\\end{thebibliography}`;
+      return `${warning}\\begin{thebibliography}{99}\n\n${itemStrings}\n\n\\end{thebibliography}`;
     } else {
-      return itemStrings;
+      return `${warning}${itemStrings}`;
     }
   };
 
