@@ -36,11 +36,11 @@ const AboutModal = ({ isOpen, onClose }) => {
             </div>
             <div className="flex justify-between border-b border-gray-100 pb-2">
               <span className="font-medium">開発者</span>
-              <span>中央大学理工学部國井研究室 西藤 実</span>
+              <span>中央大学理工学部國井研究室　西藤 実</span>
             </div>
             <div className="flex justify-between border-b border-gray-100 pb-2">
-              <span className="font-medium">ライセンス</span>
-              <span>MIT License</span>
+              <span className="font-medium">リポジトリ</span>
+              <span><a href="https://github.com/minoru-saito-chuo/bib-generator/tree/main" target='_blank'>GitHub</a></span>
             </div>
           </div>
 
