@@ -1,5 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Copy, Plus, Trash2, FileText, List, Check, BookOpen, Globe, Settings, Monitor, Link, ChevronRight, GripVertical, Save, AlertTriangle } from 'lucide-react';
+import { Copy, Plus, Trash2, FileText, List, Check, BookOpen, Globe, Settings, Monitor, Link, ChevronRight, GripVertical, Save, AlertTriangle, Download, Upload, Info } from 'lucide-react';
+import AboutModal from './components/AboutModal';
+import ImportModal from './components/ImportModal';
+
+// UI Components mimicking macOS - Moved outside to fix lint error
+const SegmentedControl = ({ options, value, onChange }) => (
+  <div className="flex bg-gray-200/80 p-0.5 rounded-lg select-none inline-flex">
+    {options.map((opt) => (
+      <button
+        key={opt.value}
+        onClick={() => onChange(opt.value)}
+        className={`
+          px-3 py-1 text-xs font-medium rounded-[6px] transition-all
+          ${value === opt.value
+            ? 'bg-white text-black shadow-sm'
+            : 'text-gray-500 hover:text-gray-700'}
+        `}
+      >
+        {opt.label}
+      </button>
+    ))}
+  </div>
+);
 
 const App = () => {
   // State for form inputs
@@ -15,7 +37,7 @@ const App = () => {
     year: '',
     url: '',          // For Web
     accessDate: '',   // For Web
-    langType: 'english', // 'english' or 'japanese'
+    langType: 'japanese', // Default changed to 'japanese' per Request ④
   });
 
   // State for the list of items
@@ -25,6 +47,10 @@ const App = () => {
   const [mode, setMode] = useState('full'); // 'full' or 'item'
   const [formatStyle, setFormatStyle] = useState('standard'); // 'standard' or 'author_year'
   const [copied, setCopied] = useState(false);
+
+  // Modals state
+  const [showAbout, setShowAbout] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   // Refs for Drag and Drop
   const dragItem = useRef(null);
@@ -50,6 +76,7 @@ const App = () => {
       try {
         const parsedItems = JSON.parse(savedData);
         if (Array.isArray(parsedItems) && parsedItems.length > 0) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setItems(parsedItems);
           console.log("Loaded from Cookie:", parsedItems.length, "items");
         }
@@ -92,6 +119,41 @@ const App = () => {
   };
 
   // --- End Cookie Logic ---
+
+  // --- Export Logic (Request ②) ---
+  const handleExport = () => {
+    if (items.length === 0) {
+      alert("エクスポートするデータがありません。");
+      return;
+    }
+
+    const content = generateOutput();
+    // Embed JSON data for lossless import
+    const jsonData = JSON.stringify(items);
+    const fileContent = `${content}\n\n% ==========================================\n% BIB_JSON_DATA: ${jsonData}\n% ==========================================\n`;
+
+    const blob = new Blob([fileContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'References.tex';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // --- Import Logic (Request ③) ---
+  const handleImport = (importedItems) => {
+    if (confirm('現在のリストを上書きしますか？\n（キャンセルを選択すると現在のリストに追加します）')) {
+      setItems(importedItems);
+    } else {
+      // Append logic: Avoid duplicate IDs
+      const newItems = importedItems.map(item => ({...item, id: Date.now() + Math.random()}));
+      setItems(prev => [...prev, ...newItems]);
+    }
+  };
+
 
   // Handle input changes
   const handleInputChange = (e) => {
@@ -272,41 +334,25 @@ const App = () => {
     document.body.removeChild(textArea);
   };
 
-  // UI Components mimicking macOS
-
-  const SegmentedControl = ({ options, value, onChange }) => (
-    <div className="flex bg-gray-200/80 p-0.5 rounded-lg select-none inline-flex">
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          onClick={() => onChange(opt.value)}
-          className={`
-            px-3 py-1 text-xs font-medium rounded-[6px] transition-all
-            ${value === opt.value
-              ? 'bg-white text-black shadow-sm'
-              : 'text-gray-500 hover:text-gray-700'}
-          `}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  );
-
   return (
+    // Modified layout for Responsive (Request ①)
     <div className="h-screen w-full bg-[#F5F5F7] flex flex-col font-sans antialiased text-gray-900 overflow-hidden">
 
+      <AboutModal isOpen={showAbout} onClose={() => setShowAbout(false)} />
+      <ImportModal isOpen={showImport} onClose={() => setShowImport(false)} onImport={handleImport} />
+
       {/* Header / Toolbar */}
-      <header className="h-14 bg-[#F5F5F7] border-b border-gray-300 flex items-center justify-between px-4 shrink-0">
+      <header className="h-14 bg-[#F5F5F7] border-b border-gray-300 flex items-center justify-between px-4 shrink-0 z-10">
         <div className="flex items-center gap-4 lg:gap-6">
           <h1 className="text-lg font-semibold text-gray-700 flex items-center gap-2">
             <BookOpen size={20} className="text-gray-500" />
-            BibGenerator
+            <span className="hidden sm:inline">BibGenerator</span>
+            <span className="sm:hidden">BibGen</span>
           </h1>
 
           <div className="h-6 w-px bg-gray-300 hidden md:block"></div>
 
-          <div className="flex items-center gap-2 md:gap-4 overflow-x-auto">
+          <div className="flex items-center gap-2 md:gap-4 overflow-x-auto no-scrollbar">
             <SegmentedControl
               options={[
                 { label: 'Paper', value: 'paper' },
@@ -315,18 +361,39 @@ const App = () => {
               value={formData.entryType}
               onChange={(val) => setFormData({ ...formData, entryType: val })}
             />
-            <SegmentedControl
-              options={[
-                { label: 'English', value: 'english' },
-                { label: '日本語', value: 'japanese' }
-              ]}
-              value={formData.langType}
-              onChange={(val) => setFormData({ ...formData, langType: val })}
-            />
+            {/* Hidden on very small screens if needed, or wrap */}
+            <div className="hidden sm:block">
+              <SegmentedControl
+                options={[
+                  { label: 'English', value: 'english' },
+                  { label: '日本語', value: 'japanese' }
+                ]}
+                value={formData.langType}
+                onChange={(val) => setFormData({ ...formData, langType: val })}
+              />
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* New Import Button */}
+          <button
+            onClick={() => setShowImport(true)}
+            className="p-1.5 text-gray-500 hover:bg-gray-200 rounded transition-colors"
+            title="Import Data"
+          >
+            <Upload size={18} />
+          </button>
+
+          {/* New About Button */}
+          <button
+            onClick={() => setShowAbout(true)}
+            className="p-1.5 text-gray-500 hover:bg-gray-200 rounded transition-colors"
+            title="About"
+          >
+            <Info size={18} />
+          </button>
+
           <div className="hidden md:flex items-center gap-2 mr-2">
             <button
               onClick={saveToCookie}
@@ -334,14 +401,8 @@ const App = () => {
               title="Cookieに一時保存します"
             >
               <Save size={14} className="text-gray-500" />
-              Save (Cookie)
+              Save
             </button>
-            <div className="group relative">
-              <AlertTriangle size={14} className="text-amber-500 cursor-help" />
-              <div className="absolute right-0 top-full mt-2 w-48 p-2 bg-gray-800 text-white text-[10px] rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                Cookie保存は一時的なものです。キャッシュ削除で消える可能性があります。
-              </div>
-            </div>
           </div>
 
           <div className="h-4 w-px bg-gray-300 mx-1 hidden md:block"></div>
@@ -349,7 +410,7 @@ const App = () => {
           <select
             value={formatStyle}
             onChange={(e) => setFormatStyle(e.target.value)}
-            className="bg-white border border-gray-300 text-gray-700 text-xs rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm cursor-pointer w-24 md:w-auto"
+            className="bg-white border border-gray-300 text-gray-700 text-xs rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm cursor-pointer w-24 hidden sm:block"
           >
             <option value="standard">Standard</option>
             <option value="author_year">Author-Year</option>
@@ -357,18 +418,18 @@ const App = () => {
         </div>
       </header>
 
-      {/* Main Content Area (3 Columns) */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* Main Content Area (3 Columns) - Responsive Layout Change */}
+      <div className="flex flex-1 overflow-hidden flex-col lg:flex-row">
 
         {/* Column 1: Sidebar (List) */}
-        <div className="w-64 bg-[#F2F3F5] border-r border-gray-300 flex flex-col shrink-0">
-          <div className="p-3 border-b border-gray-200/50 flex justify-between items-center">
+        <div className="w-full lg:w-64 bg-[#F2F3F5] border-b lg:border-b-0 lg:border-r border-gray-300 flex flex-col shrink-0 lg:h-full h-1/4 min-h-[150px]">
+          <div className="p-3 border-b border-gray-200/50 flex justify-between items-center bg-[#F2F3F5] sticky top-0 z-10">
             <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider pl-2">Library</span>
             <span className="text-[10px] text-gray-400 font-mono">{items.length} items</span>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {items.length === 0 ? (
-              <div className="text-center py-10 flex flex-col items-center gap-2">
+              <div className="text-center py-6 lg:py-10 flex flex-col items-center gap-2">
                 <List size={24} className="text-gray-300" />
                 <p className="text-xs text-gray-400">No Items</p>
               </div>
@@ -383,7 +444,6 @@ const App = () => {
                   onDragOver={handleDragOver}
                 >
                   <div className="flex items-center gap-2">
-                    {/* Drag Handle Icon - Visible on hover or when helpful, here always visible but subtle */}
                     <div className="text-gray-300 group-hover:text-gray-400 cursor-grab active:cursor-grabbing">
                       <GripVertical size={14} />
                     </div>
@@ -393,10 +453,9 @@ const App = () => {
                       <p className="text-xs text-gray-500 truncate">{item.title}</p>
                     </div>
 
-                    {/* Delete Button */}
                     <button
                       onClick={(e) => { e.stopPropagation(); removeItem(item.id); }}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-opacity"
+                      className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-opacity"
                       title="Delete"
                     >
                       <Trash2 size={14} />
@@ -410,7 +469,7 @@ const App = () => {
           <div className="p-2 border-t border-gray-300 bg-[#EBECEF] flex justify-between items-center">
             <button
               onClick={saveToCookie}
-              className="md:hidden p-1.5 hover:bg-black/5 rounded text-gray-500 transition-colors"
+              className="lg:hidden p-1.5 hover:bg-black/5 rounded text-gray-500 transition-colors"
               title="Cookieに保存"
             >
               <Save size={14} />
@@ -424,19 +483,19 @@ const App = () => {
         </div>
 
         {/* Column 2: Editor (Form) */}
-        <div className="flex-1 bg-white flex flex-col min-w-[300px]">
-          <div className="p-8 overflow-y-auto flex-1">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center gap-3">
+        <div className="flex-1 bg-white flex flex-col min-w-0 lg:min-w-[300px] overflow-hidden h-2/4 lg:h-full">
+          <div className="p-4 lg:p-8 overflow-y-auto flex-1">
+            <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center gap-3 sticky top-0 bg-white py-2 z-10">
               <div className={`p-2 rounded-lg ${formData.entryType === 'paper' ? 'bg-blue-50 text-blue-600' : 'bg-teal-50 text-teal-600'}`}>
                 {formData.entryType === 'paper' ? <FileText size={20} /> : <Globe size={20} />}
               </div>
               Edit Properties
             </h2>
 
-            <div className="space-y-5 max-w-2xl">
+            <div className="space-y-4 lg:space-y-5 max-w-2xl pb-10">
               {/* Key Group */}
               <div className="grid grid-cols-4 gap-4 items-center">
-                <label className="text-right text-xs font-medium text-gray-500 col-span-1">Citation Key</label>
+                <label className="text-right text-xs font-medium text-gray-500 col-span-1">Key</label>
                 <input
                   type="text"
                   name="key"
@@ -475,7 +534,7 @@ const App = () => {
 
               <div className="grid grid-cols-4 gap-4 items-center">
                 <label className="text-right text-xs font-medium text-gray-500 col-span-1">
-                  {formData.entryType === 'web' ? 'Site Name' : 'Journal'}
+                  {formData.entryType === 'web' ? 'Site' : 'Journal'}
                 </label>
                 <input
                   type="text"
@@ -490,7 +549,7 @@ const App = () => {
               {formData.entryType === 'paper' && (
                 <>
                   <div className="grid grid-cols-4 gap-4 items-center">
-                    <label className="text-right text-xs font-medium text-gray-500 col-span-1">Vol / No</label>
+                    <label className="text-right text-xs font-medium text-gray-500 col-span-1">Vol/No</label>
                     <div className="col-span-3 flex gap-2">
                       <div className="relative w-1/2">
                         <span className="absolute left-3 top-1.5 text-xs text-gray-400">Vol.</span>
@@ -542,7 +601,7 @@ const App = () => {
                     />
                   </div>
                   <div className="grid grid-cols-4 gap-4 items-center">
-                    <label className="text-right text-xs font-medium text-gray-500 col-span-1">Access Date</label>
+                    <label className="text-right text-xs font-medium text-gray-500 col-span-1">Access</label>
                     <input
                       type="text"
                       name="accessDate"
@@ -570,7 +629,7 @@ const App = () => {
           </div>
 
           {/* Editor Footer (Action Bar) */}
-          <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end">
+          <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end shrink-0">
             <button
               onClick={addItem}
               disabled={!formData.key && !formData.title}
@@ -582,19 +641,28 @@ const App = () => {
         </div>
 
         {/* Column 3: Output (Inspector) */}
-        <div className="w-80 bg-[#1e1e1e] flex flex-col border-l border-gray-800 shrink-0">
+        <div className="w-full lg:w-80 bg-[#1e1e1e] flex flex-col border-t lg:border-t-0 lg:border-l border-gray-800 shrink-0 h-1/4 lg:h-full min-h-[150px]">
           <div className="h-10 bg-[#252526] border-b border-black flex items-center justify-between px-3">
             <div className="flex bg-[#333] rounded-md p-0.5">
               <button onClick={() => setMode('full')} className={`px-2 py-0.5 text-[10px] rounded-sm transition-colors ${mode === 'full' ? 'bg-[#404040] text-white' : 'text-gray-400 hover:text-gray-200'}`}>Full</button>
               <button onClick={() => setMode('item')} className={`px-2 py-0.5 text-[10px] rounded-sm transition-colors ${mode === 'item' ? 'bg-[#404040] text-white' : 'text-gray-400 hover:text-gray-200'}`}>Items</button>
             </div>
-            <button
-              onClick={copyToClipboard}
-              className="text-gray-400 hover:text-white transition-colors"
-              title="Copy to Clipboard"
-            >
-              {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExport}
+                className="text-gray-400 hover:text-white transition-colors"
+                title="Export .tex"
+              >
+                <Download size={14} />
+              </button>
+              <button
+                onClick={copyToClipboard}
+                className="text-gray-400 hover:text-white transition-colors"
+                title="Copy to Clipboard"
+              >
+                {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+              </button>
+            </div>
           </div>
           <div className="flex-1 relative">
             <textarea
